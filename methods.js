@@ -4,6 +4,7 @@ const http = require("http");
 const https = require("https");
 const xmlParser = require("./xml-parser");
 const xmlUtils = require("./xml-utils");
+const fs = require('fs')
 
 const INFORM_PARAMS = [
   "Device.DeviceInfo.SpecVersion",
@@ -25,7 +26,7 @@ const INFORM_PARAMS = [
 ];
 
 
-function inform(device, event, callback) {
+function inform(device, event, callback, deviceAttributes) {
   let manufacturer = "";
   if (device["Device.DeviceInfo.Manufacturer"]) {
     manufacturer = xmlUtils.node(
@@ -144,7 +145,7 @@ function getSortedPaths(device) {
 }
 
 
-function GetParameterNames(device, request, callback) {
+function GetParameterNames(device, request, callback, deviceAttributes) {
   let parameterNames = getSortedPaths(device);
 
   let parameterPath, nextLevel;
@@ -200,7 +201,7 @@ function GetParameterNames(device, request, callback) {
 }
 
 
-function GetParameterValues(device, request, callback) {
+function GetParameterValues(device, request, callback, deviceAttributes) {
   let parameterNames = request.children[0].children;
 
   let params = []
@@ -229,7 +230,7 @@ function GetParameterValues(device, request, callback) {
 }
 
 
-function SetParameterValues(device, request, callback) {
+function SetParameterValues(device, request, callback, deviceAttributes) {
   let parameterValues = request.children[0].children;
 
   for (let p of parameterValues) {
@@ -254,8 +255,67 @@ function SetParameterValues(device, request, callback) {
   return callback(response);
 }
 
+function GetParameterAttributes(device, request, callback, deviceAttributes) {
+  let parameterNames = request.children[0].children;
+  let params = []
+  for (let p of parameterNames) {
+    let name = p.text;
+    let notification = deviceAttributes[name][0];
+    let accessList = deviceAttributes[name][1];
+    let attributeStruct = xmlUtils.node("ParameterAttributeStruct", {}, [
+      xmlUtils.node("Name", {}, name),
+      xmlUtils.node("Notification", {}, notification.toString()),
+      xmlUtils.node("AccessList", {}, accessList.map(e => {return `<string>${e}</string>`}).join(""))
+    ]);
+    params.push(attributeStruct);
+  }
 
-function AddObject(device, request, callback) {
+  let response = xmlUtils.node(
+    "cwmp:GetParameterAttributesResponse",
+    {},
+    xmlUtils.node(
+      "ParameterList",
+      { "soap-enc:arrayType": "cwmp:ParameterAttributesStruct[" + parameterNames.length + "]" },
+      params
+    )
+  );
+
+  return callback(response);
+}
+
+function SetParameterAttributes(device, request, callback, deviceAttributes) {
+  let parameterAttributes = request.children[0].children;
+
+  for (let p of parameterAttributes) {
+    let name, notificationChange, notification, accessListChange, accessList;
+    for (let c of p.children) {
+      switch (c.localName) {
+        case "Name":
+          name = c.text;
+          break;
+        case "NotificationChange":
+          notificationChange =  c.text;
+          break;
+        case "Notification":
+          notification = c.text;
+          break;
+        case "AccessListChange":
+          accessListChange = c.text;
+          break;
+        case "AccessList":
+          accessList = c;
+          break;
+      }
+    }
+    if (notificationChange) deviceAttributes[name][0] = xmlParser.decodeEntities(notification);
+    if (accessListChange) deviceAttributes[name][1] = accessList.children.map(v => {return v.text})
+  }
+
+  let response = xmlUtils.node("cwmp:SetParameterAttributesResponse");
+  return callback(response);
+}
+
+function AddObject(device, request, callback, deviceAttributes) {
   let objectName = request.children[0].text;
   let instanceNumber = 1;
 
@@ -288,7 +348,7 @@ function AddObject(device, request, callback) {
 }
 
 
-function DeleteObject(device, request, callback) {
+function DeleteObject(device, request, callback, deviceAttributes) {
   let objectName = request.children[0].text;
 
   for (let p in device) {
@@ -302,7 +362,7 @@ function DeleteObject(device, request, callback) {
 }
 
 
-function Download(device, request, callback) {
+function Download(device, request, callback, deviceAttributes) {
   let commandKey, url;
   for (let c of request.children) {
     switch (c.name) {
@@ -317,9 +377,12 @@ function Download(device, request, callback) {
 
   let faultCode = "9010";
   let faultString = "Download timeout";
+  let fileName = url.substr(url.lastIndexOf("/") + 1)
+  const file = fs.createWriteStream(fileName);
 
   if (url.startsWith("http://")) {
     http.get(url, (res) => {
+      res.pipe(file)
       res.on("end", () => {
         if (res.statusCode === 200) {
           faultCode = "0";
@@ -332,11 +395,13 @@ function Download(device, request, callback) {
       });
       res.resume();
     }).on("error", (err) => {
+      console.log("FUCK")
       faultString = err.message;
     });
   }
   else if (url.startsWith("https://")) {
     https.get(url, (res) => {
+      res.pipe(file)
       res.on("end", () => {
         if (res.statusCode === 200) {
           faultCode = "0";
@@ -349,6 +414,7 @@ function Download(device, request, callback) {
       });
       res.resume();
     }).on("error", (err) => {
+      console.log("extra fucc")
       faultString = err.message;
     });
   }
@@ -391,3 +457,5 @@ exports.SetParameterValues = SetParameterValues;
 exports.AddObject = AddObject;
 exports.DeleteObject = DeleteObject;
 exports.Download = Download;
+exports.SetParameterAttributes = SetParameterAttributes;
+exports.GetParameterAttributes = GetParameterAttributes;

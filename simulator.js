@@ -18,6 +18,7 @@ let pendingInform = false;
 let http = null;
 let requestOptions = null;
 let device = null;
+let deviceAttributes = null;
 let httpAgent = null;
 let basicAuth;
 
@@ -215,7 +216,7 @@ function handleMethod(xml) {
     sendRequest(xml, function(xml) {
       handleMethod(xml);
     });
-  });
+  }, deviceAttributes);
 }
 
 function listenForConnectionRequests(serialNumber, acsUrlOptions, callback) {
@@ -260,7 +261,10 @@ function listenForConnectionRequests(serialNumber, acsUrlOptions, callback) {
 
 function start(dataModel, serialNumber, acsUrl) {
   device = dataModel;
-
+  deviceAttributes = Object.assign({}, dataModel);
+  for (let name in deviceAttributes){
+    deviceAttributes[name] = [0, []];
+  }
   if (device["Device.DeviceInfo.SerialNumber"])
     device["Device.DeviceInfo.SerialNumber"][1] = serialNumber;
   else if (device["InternetGatewayDevice.DeviceInfo.SerialNumber"])
