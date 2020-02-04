@@ -22,6 +22,8 @@ let deviceAttributes = null;
 let httpAgent = null;
 let basicAuth;
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0" // Avoids DEPTH_ZERO_SELF_SIGNED_CERT error for self-signed certs
+
 
 function createSoapDocument(id, body) {
   let headerNode = xmlUtils.node(

@@ -448,14 +448,20 @@ function Download(device, request, callback, deviceAttributes) {
   return callback(response);
 }
 
+function Reboot(device, request, callback, deviceAttributes){
+  let response = xmlUtils.node("cwmp:RebootResponse");
+  return callback(response);
+}
+
 
 exports.inform = inform;
 exports.getPending = getPending;
 exports.GetParameterNames = GetParameterNames;
 exports.GetParameterValues = GetParameterValues;
 exports.SetParameterValues = SetParameterValues;
+exports.SetParameterAttributes = SetParameterAttributes;
+exports.GetParameterAttributes = GetParameterAttributes;
 exports.AddObject = AddObject;
 exports.DeleteObject = DeleteObject;
 exports.Download = Download;
-exports.SetParameterAttributes = SetParameterAttributes;
-exports.GetParameterAttributes = GetParameterAttributes;
+exports.Reboot = Reboot;
